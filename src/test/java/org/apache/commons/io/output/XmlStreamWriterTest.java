@@ -16,12 +16,15 @@
  */
 package org.apache.commons.io.output;
 
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
 
+import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.DefaultLocale;
 
@@ -154,5 +157,23 @@ public class XmlStreamWriterTest {
     @Test
     public void testEBCDICEncoding() throws IOException {
         checkXmlWriter("simple text in EBCDIC", "CP1047");
+    }
+
+    /**
+     * CVE-2024-47554: a crafted XML prolog must not make the encoding detection consume excessive CPU.
+     */
+    @Test
+    public void testCraftedPrologDoesNotConsumeExcessiveCpu() {
+        final StringBuilder sb = new StringBuilder(IOUtils.DEFAULT_BUFFER_SIZE);
+        while (sb.length() < IOUtils.DEFAULT_BUFFER_SIZE - 200) {
+            sb.append("<?xml");
+        }
+        sb.append("?>\n<text>text</text>");
+        final String xml = sb.toString();
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            for (int i = 0; i < 2000; i++) {
+                checkXmlContent(xml, "UTF-8", null);
+            }
+        });
     }
 }
