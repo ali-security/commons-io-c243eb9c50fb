@@ -22,7 +22,6 @@ cache:
 jdk:
   - openjdk8
   - openjdk11
-  - openjdk14
   - openjdk-ea
   - oraclejdk11
 
@@ -32,10 +31,21 @@ matrix:
   include:
     - jdk: openjdk-ea
       env: JACOCO_SKIP=true
+    # Travis can no longer provision openjdk14 (bellsoft-java14 is gone from apt.bell-sw.com),
+    # so this leg installs Azul Zulu JDK 14.0.2 itself and runs the same script on it.
+    - jdk: openjdk11
+      env: JDK=14
+      before_install:
+        - wget -q https://cdn.azul.com/zulu/bin/zulu14.29.23-ca-jdk14.0.2-linux_x64.tar.gz -O /tmp/jdk14.tgz
+        - mkdir -p /tmp/jdk14 && tar xzf /tmp/jdk14.tgz -C /tmp/jdk14 --strip-components=1
+        - export JAVA_HOME=/tmp/jdk14
+        - export PATH=$JAVA_HOME/bin:$PATH
+        - java -version
 
 # --no-transfer-progress requires Maven 3.6.1+. Otherwise use --batch-mode
 script:
   - mvn -V --no-transfer-progress
 
-after_success:
-  - mvn -V --no-transfer-progress clean cobertura:cobertura coveralls:report -Ptravis-cobertura
+# List every skipped test with its reason (Surefire's console summary prints only a count)
+after_script:
+  - awk '/<testcase /{tc=$0; n++} /<skipped/{print tc; print $0; s++} /<failure|<error /{f++} END{printf "Surefire totals - tests %d, passed %d, skipped %d, failed or errored %d\n", n, n-s-f, s, f}' target/surefire-reports/TEST-*.xml
